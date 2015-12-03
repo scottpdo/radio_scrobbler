@@ -1,6 +1,5 @@
 import React from 'react';
 import $ from 'jquery';
-import store from 'store';
 import { gup } from '../utils';
 import { apiKey, appEndpoint } from '../constants';
 
@@ -27,9 +26,9 @@ class MainComponent extends React.Component {
 				data: {
 					token
 				},
-				success: function(response) {
+				success: (response) => {
 					if ( response.session.key ) {
-						store.set('sk', response.session.key);
+						localStorage.setItem('sk', response.session.key);
 						this.setState({
 							authenticated: true
 						});
@@ -59,7 +58,7 @@ class MainComponent extends React.Component {
 				"track": this.state.currentTrack.title,
 				"timestamp": timestamp,
 				api_key: apiKey,
-				sk: store.get('sk')
+				sk: localStorage.getItem('sk')
 			};
 
 			if ( this.state.currentTrack.album ) postData["album"] = this.state.currentTrack.album;
@@ -75,7 +74,7 @@ class MainComponent extends React.Component {
 			dataToHash += 'artist' + this.state.currentTrack.artist;
 			dataToHash += 'chosenByUser' + '0',
 			dataToHash += 'method' + 'track.scrobble';
-			dataToHash += 'sk' + store.get('sk');
+			dataToHash += 'sk' + localStorage.getItem('sk');
 			dataToHash += 'timestamp' + timestamp;
 			dataToHash += 'track' + this.state.currentTrack.title;
 
@@ -85,7 +84,7 @@ class MainComponent extends React.Component {
 				data: {
 					dataToHash
 				},
-				success(data) {
+				success: (data) => {
 					
 					postData.api_sig = data.signature;
 
@@ -96,8 +95,12 @@ class MainComponent extends React.Component {
 						success(data) {
 							console.log('success', data);
 						},
-						error(err) {
-							console.log('error', err);
+						error: (err) => {
+							console.log('there was an error scrobbling', this);
+							localStorage.removeItem('sk');
+							this.setState({
+								authenticated: false
+							});
 						}
 					});
 				},
@@ -119,7 +122,14 @@ class MainComponent extends React.Component {
 							currentTrack: newTrack
 						});
 
-						scrobble.call(this);
+						// prevent user refreshing and returning within the same song
+						if ( newTrack.artist !== localStorage.getItem('recentArtist') || newTrack.title !== localStorage.getItem('recentTrack')) {
+
+							scrobble.call(this);
+						}
+
+						localStorage.setItem('recentArtist', newTrack.artist);
+						localStorage.setItem('recentTrack', newTrack.title);
 					}
 
 					setTimeout(updateCurrentTrack, timer * 1000);
@@ -132,7 +142,7 @@ class MainComponent extends React.Component {
 		if ( gup('token') ) auth.call(this, gup('token'));
 
 		// it's possible this is no longer valid -- will check when trying to scrobble
-		if ( store.get('sk') ) {
+		if ( localStorage.getItem('sk') ) {
 			this.setState({
 				authenticated: true
 			});
@@ -149,11 +159,35 @@ class MainComponent extends React.Component {
 			window.location.assign('http://www.last.fm/api/auth/?api_key=' + apiKey + '&cb=' + window.location.origin + window.location.pathname);
 		};
 
-		let loginStyle = {
-			display: this.state.authenticated ? 'none' : 'block'
+		let revoke = () => {
+			localStorage.removeItem('sk');
+			this.setState({
+				authenticated: false
+			});
 		};
 
-		let context = 'You are listening but not scrobbling.';
+		let buttonStyle = {
+			background: '#a60009',
+			color: '#fff',
+			cursor: 'pointer',
+			border: 0,
+			borderRadius: '5px',
+			fontSize: '1.1em',
+			padding: '0.5em 2em',
+			textTransform: 'uppercase'
+		};
+
+		let loginStyle = $.extend({}, buttonStyle, {
+			display: this.state.authenticated ? 'none' : 'block'
+		});
+
+		let revokeStyle = $.extend({}, buttonStyle, {
+			display: this.state.authenticated ? 'block' : 'none',
+			background: '#aaa',
+			fontSize: '0.8em'
+		});
+
+		let context = 'You are listening but not scrobbling. Log in to scrobble!';
 		if ( this.state.authenticated ) {
 			context = 'You are authenticated and scrobbling!';
 		}
@@ -165,8 +199,12 @@ class MainComponent extends React.Component {
 
 		return (
 			<div style={containerStyle}>
-				<button onClick={login} style={loginStyle}>Log In</button>
 				<p style={contextStyle}>{context}</p>
+				<button onClick={revoke} style={revokeStyle}>Revoke Access</button>
+				<button onClick={login} style={loginStyle}>Log In</button>
+				<br />
+				<br />
+				<p><a href="https://twitter.com/scottpdonaldson" className="twitter-follow-button" data-show-count="false">Follow @scottpdonaldson</a></p>
 			</div>
 		);
 	}
