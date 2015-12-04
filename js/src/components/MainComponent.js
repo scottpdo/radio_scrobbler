@@ -11,11 +11,18 @@ class MainComponent extends React.Component {
 
 		this.state = {
 			authenticated: false,
-			currentTrack: null
+			currentTrack: null,
+			station: null
 		};
 	}
 
 	componentWillMount() {
+
+		this.props.stationManager.change(station => {
+			this.setState({
+				station
+			}, updateCurrentTrack);
+		});
 
 		let timer = 60;
 
@@ -96,45 +103,47 @@ class MainComponent extends React.Component {
 							console.log('success', data);
 						},
 						error: (err) => {
-							console.log('there was an error scrobbling', this);
 							localStorage.removeItem('sk');
 							this.setState({
 								authenticated: false
 							});
 						}
 					});
-				},
-				error(err) {
-					console.log('error', err);
 				}
 			});
 		}
 
 		// start checking for tracks
 		let updateCurrentTrack = () => {
-			$.ajax({
-				url: appEndpoint,
-				success: newTrack => {
-					
-					if ( !this.state.currentTrack || trackChanged.call(this, newTrack) ) {
+			if ( this.state.station ) {
+				$.ajax({
+					url: appEndpoint,
+					type: 'POST',
+					data: {
+						station: this.state.station
+					},
+					success: newTrack => {
 						
-						this.setState({
-							currentTrack: newTrack
-						});
+						if ( !this.state.currentTrack || trackChanged.call(this, newTrack) ) {
+							
+							this.setState({
+								currentTrack: newTrack
+							});
 
-						// prevent user refreshing and returning within the same song
-						if ( newTrack.artist !== localStorage.getItem('recentArtist') || newTrack.title !== localStorage.getItem('recentTrack')) {
+							// prevent user refreshing and returning within the same song
+							if ( newTrack.artist !== localStorage.getItem('recentArtist') || newTrack.title !== localStorage.getItem('recentTrack')) {
 
-							scrobble.call(this);
+								scrobble.call(this);
+							}
+
+							localStorage.setItem('recentArtist', newTrack.artist);
+							localStorage.setItem('recentTrack', newTrack.title);
 						}
 
-						localStorage.setItem('recentArtist', newTrack.artist);
-						localStorage.setItem('recentTrack', newTrack.title);
+						setTimeout(updateCurrentTrack, timer * 1000);
 					}
-
-					setTimeout(updateCurrentTrack, timer * 1000);
-				}
-			});
+				});
+			}
 		};
 
 		updateCurrentTrack();
